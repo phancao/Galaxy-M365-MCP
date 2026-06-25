@@ -252,6 +252,13 @@ class MicrosoftGraphServer {
       app.use(express.json());
       app.use(express.urlencoded({ extended: true }));
 
+      // Galaxy: unauthenticated liveness probe for the docker healthcheck and
+      // the Nexus gateway. Declared before CORS/rate-limit/auth so it never
+      // requires a bearer token and is never throttled.
+      app.get('/health', (_req, res) => {
+        res.json({ status: 'ok', service: 'galaxy-m365-mcp', orgMode: !!this.options.orgMode });
+      });
+
       // Add CORS headers for all routes
       const corsOrigin = process.env.MS365_MCP_CORS_ORIGIN || 'http://localhost:3000';
       app.use((req, res, next) => {
