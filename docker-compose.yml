@@ -1,0 +1,45 @@
+# Galaxy — Microsoft 365 MCP sidecar
+#
+# Runs the forked ms-365-mcp-server as an internal HTTP MCP server on the
+# shared galaxy_network, the same way other Galaxy fork repos (RAGFlow,
+# Activepieces) bring their own compose. AgentOps reaches it in-cluster at
+# http://nexus-m365-mcp:3000/mcp and authenticates each turn with a
+# per-user Microsoft Graph token (BYOT) minted by the identity_service
+# M365 broker — so this service holds NO Azure secrets.
+#
+#   docker compose up -d --build
+#
+# galaxy_network is created by the Galaxy-Nexus stack (external: true).
+
+services:
+  nexus-m365-mcp:
+    container_name: nexus-m365-mcp
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # --org-mode unlocks Teams / Online Meetings / shared calendars.
+    # --preset trims the 200+ tool surface to mail+calendar+teams.
+    # --obo is intentionally omitted: the broker hands a ready Graph token,
+    # so the per-request bearer is used directly (server.ts:715).
+    # Args only — the image ENTRYPOINT is ["node", "dist/index.js"].
+    command: ["--http", "0.0.0.0:3000", "--org-mode", "--preset", "mail,calendar,teams"]
+    environment:
+      # CORS for the Nexus gateway origin; MCP traffic is server-to-server.
+      - MS365_MCP_CORS_ORIGIN=${MS365_MCP_CORS_ORIGIN:-https://nexus.8verse.games}
+      # One reverse-proxy hop (Nexus gateway) in front.
+      - MS365_MCP_TRUST_PROXY_HOPS=${MS365_MCP_TRUST_PROXY_HOPS:-1}
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - galaxy_network
+
+networks:
+  galaxy_network:
+    external: true
