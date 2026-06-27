@@ -25,7 +25,7 @@ services:
     command: ["--http", "0.0.0.0:3000", "--org-mode", "--preset", "mail,calendar,teams"]
     environment:
       # CORS for the Nexus gateway origin; MCP traffic is server-to-server.
-      - MS365_MCP_CORS_ORIGIN=${MS365_MCP_CORS_ORIGIN:-https://nexus.8verse.games}
+      - MS365_MCP_CORS_ORIGIN=${MS365_MCP_CORS_ORIGIN:-https://ai.skyplatform.net}
       # One reverse-proxy hop (Nexus gateway) in front.
       - MS365_MCP_TRUST_PROXY_HOPS=${MS365_MCP_TRUST_PROXY_HOPS:-1}
     expose:
