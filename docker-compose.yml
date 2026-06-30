@@ -28,6 +28,15 @@ services:
       - MS365_MCP_CORS_ORIGIN=${MS365_MCP_CORS_ORIGIN:-https://ai.skyplatform.net}
       # One reverse-proxy hop (Nexus gateway) in front.
       - MS365_MCP_TRUST_PROXY_HOPS=${MS365_MCP_TRUST_PROXY_HOPS:-1}
+      # --- OpenTelemetry (Node auto-instrumentation; opt-in, fail-safe) ---
+      - NODE_OPTIONS=--require @opentelemetry/auto-instrumentations-node/register
+      - OTEL_SERVICE_NAME=galaxy-m365-mcp
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_RESOURCE_ATTRIBUTES=service.namespace=galaxy,deployment.environment=${DEPLOY_ENV:-prod}
+      - OTEL_NODE_DISABLED_INSTRUMENTATIONS=fs
+      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-false}
     expose:
       - "3000"
     healthcheck:
