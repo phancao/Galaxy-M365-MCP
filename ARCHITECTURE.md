@@ -3,7 +3,7 @@
 > **What this repo is.** `Galaxy-M365-MCP` is a hard fork of
 > [`softeria/ms-365-mcp-server`](https://github.com/Softeria/ms-365-mcp-server) — a
 > stateless **TypeScript** MCP server that proxies Microsoft Graph. In Galaxy it is
-> deployed as the container **`vortex-m365-mcp`** (legacy alias `vortex-m365-mcp`),
+> deployed as the container **`vortex-m365-mcp`** (legacy alias `nexus-m365-mcp`),
 > a **BYOT** sidecar: it accepts a per-request Microsoft Graph bearer token and
 > forwards it to Graph, holding **no Azure secrets** (`docker-compose.yml:1-12`).
 >
@@ -91,7 +91,7 @@ The Galaxy Microsoft 365 integration is **four** tiers. This repo is one of them
   `seed_m365_assistant.sql:21` (`"url":"http://galaxy-m365-mcp:3000/mcp"`,
   `"galaxy_auth":"m365"`). Reads the request bearer into a `ContextVar` and calls
   `GRAPH="https://graph.microsoft.com/v1.0"` directly (`server.py:39,920-933`).
-- **THIS REPO:** container `vortex-m365-mcp` / `vortex-m365-mcp`. TS BYOT sidecar,
+- **THIS REPO:** container `vortex-m365-mcp` / `nexus-m365-mcp`. TS BYOT sidecar,
   kebab-case Graph tools. Exposed to external clients via the connector.
 - **Connector (not this repo):** `Galaxy-Nexus/services/m365-connector`, container
   `vortex-m365-connector`. OAuth 2.1 resource-server facade for external clients
@@ -230,7 +230,7 @@ consented at connect time (§6). Print the minimal list with
    (`services/m365-connector/app/main.py:3,38`), but its configured
    `M365_SIDECAR_URL` default is `http://galaxy-m365-mcp:3000`
    (`main.py:39`, `services/m365-connector/docker-compose.yml:20`) — the hostname of the
-   **Python** server, not this repo's container (`vortex-m365-mcp`/`vortex-m365-mcp`,
+   **Python** server, not this repo's container (`vortex-m365-mcp`/`nexus-m365-mcp`,
    `docker-compose.yml:52`). Either this fork is no longer the connector's proxy target
    (post-cutover) or there is a hostname mismatch. Confirm which container the connector
    actually reaches in prod before relying on this repo being in the live path.
@@ -249,7 +249,7 @@ consented at connect time (§6). Print the minimal list with
 
 ## 9. Deploy topology (this repo)
 
-- **Container:** `vortex-m365-mcp` (alias `vortex-m365-mcp`), `mem_limit: 768m`,
+- **Container:** `vortex-m365-mcp` (alias `nexus-m365-mcp`), `mem_limit: 768m`,
   `restart: unless-stopped`, external `galaxy_network`, `expose: 3000` only
   (`docker-compose.yml:15-52`).
 - **Command:** `--http 0.0.0.0:3000 --org-mode --preset mail,calendar,teams`
