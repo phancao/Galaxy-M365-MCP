@@ -57,7 +57,7 @@ follow `redirect_url` to Microsoft, consent, land on the callback.
 
 ## 5. Per-user Graph token mint (Surface C)
 **Test (internal, loopback only).**
-`curl -s -X POST http://nexus-identity:8086/internal/m365/graph-token -H "X-Service-Secret: $INTERNAL_SERVICE_SECRET" -H 'content-type: application/json' -d '{"user_id":"<uuid>","email":"<user@tenant>"}'`.
+`curl -s -X POST http://vortex-identity:8086/internal/m365/graph-token -H "X-Service-Secret: $INTERNAL_SERVICE_SECRET" -H 'content-type: application/json' -d '{"user_id":"<uuid>","email":"<user@tenant>"}'`.
 **Expect.** `200` + a Graph access token whose payload `upn`/`preferred_username` is that
 user (`api/internal.py:806-882`). Wrong/absent secret → `401/403`
 (`verify_service_secret_strict`, `:131-153`). A user who never connected → `404`/reconnect

@@ -3,7 +3,7 @@
 # Runs the forked ms-365-mcp-server as an internal HTTP MCP server on the
 # shared galaxy_network, the same way other Galaxy fork repos (RAGFlow,
 # Activepieces) bring their own compose. AgentOps reaches it in-cluster at
-# http://nexus-m365-mcp:3000/mcp and authenticates each turn with a
+# http://vortex-m365-mcp:3000/mcp and authenticates each turn with a
 # per-user Microsoft Graph token (BYOT) minted by the identity_service
 # M365 broker — so this service holds NO Azure secrets.
 #
@@ -12,7 +12,7 @@
 # galaxy_network is created by the Galaxy-Nexus stack (external: true).
 
 services:
-  nexus-m365-mcp:
+  vortex-m365-mcp:
     container_name: vortex-m365-mcp
     mem_limit: 768m
     build:
