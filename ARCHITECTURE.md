@@ -7,15 +7,19 @@
 > a **BYOT** sidecar: it accepts a per-request Microsoft Graph bearer token and
 > forwards it to Graph, holding **no Azure secrets** (`docker-compose.yml:1-12`).
 >
-> **Read this before trusting the tool names.** The 38 curated `m365_*` tools that
-> AI agents actually see are **NOT defined in this repo.** They live in a *separate,
-> first-party Python FastMCP server* — `Galaxy-Nexus/mcp_servers/galaxy-m365-mcp/server.py`
-> (container `galaxy-m365-mcp`) — which AgentOps binds directly. This TS fork exposes
-> ~142 raw **kebab-case** Graph tools instead (`list-mail-messages`, `send-mail`, …),
-> and Galaxy seeds describe it as the **"fallback during cutover"**
-> (`Galaxy-Nexus/agentops/backend/database/seed_m365_assistant.sql`). See
-> [§3 Component map](#3-component-map). The two servers share the confusable "m365-mcp"
-> name; do not conflate them.
+> **Read this before trusting the tool names — two servers share one name.** When
+> anyone at Galaxy says "the M365 MCP server", they almost always mean the **PRIMARY**:
+> a *separate, first-party Python FastMCP server* at
+> `Galaxy-Nexus/mcp_servers/galaxy-m365-mcp/server.py` (container `galaxy-m365-mcp`),
+> which defines all **38 curated `m365_*` tools** and is what AgentOps binds directly.
+> **This repo is not that server.** This repo is the TS softeria fork, kept as the
+> **"fallback during cutover"** (per the Galaxy seed,
+> `Galaxy-Nexus/agentops/backend/database/seed_m365_assistant.sql`), exposing ~142 raw
+> **kebab-case** Graph tools (`list-mail-messages`, `send-mail`, …) that no Galaxy
+> agent is seeded to use. As of 12/08/2026 even the external connector's *default*
+> target is the Python server, not this fork (finding S1, §8) — so this fork has **no
+> confirmed live traffic path**; treat it as standby until S1 is settled. See
+> [§3 Component map](#3-component-map). Do not conflate the two servers.
 >
 > **Stale-doc warning.** This repo's `README.md` and `docs/deployment.md` are the
 > *upstream* softeria docs. They describe a generic "each MCP client runs its own
@@ -225,15 +229,21 @@ consented at connect time (§6). Print the minimal list with
 2. **Network isolation is load-bearing.** `expose: "3000"` (no `ports:`) on the external
    `galaxy_network` (`docker-compose.yml:41-52`) — in-cluster only. External reach is
    *supposed* to go through the connector's OAuth facade (RS256 verify, scope-gated).
-3. **Finding S1 — connector target vs. this repo (naming/config mismatch).** The
-   connector's docstring says it fronts "the TS fork (nexus-m365-mcp)"
-   (`services/m365-connector/app/main.py:3,38`), but its configured
-   `M365_SIDECAR_URL` default is `http://galaxy-m365-mcp:3000`
-   (`main.py:39`, `services/m365-connector/docker-compose.yml:20`) — the hostname of the
-   **Python** server, not this repo's container (`vortex-m365-mcp`/`nexus-m365-mcp`,
-   `docker-compose.yml:52`). Either this fork is no longer the connector's proxy target
-   (post-cutover) or there is a hostname mismatch. Confirm which container the connector
-   actually reaches in prod before relying on this repo being in the live path.
+3. **Finding S1 — the connector's docstring is wrong about its own target (OPEN,
+   status 12/08/2026).** The connector's docstring and inline comment say it fronts
+   "the BYOT TypeScript sidecar (vortex-m365-mcp)" / "the TS fork"
+   (`services/m365-connector/app/main.py:3,38`) — **that claim is false as written.**
+   The code's configured default is `M365_SIDECAR_URL = http://galaxy-m365-mcp:3000`
+   (`main.py:39`), the hostname of the **Python** server, not this repo's container
+   (`vortex-m365-mcp`/`nexus-m365-mcp`, `docker-compose.yml:52`). So unless a prod env
+   override redirects it, external MCP traffic is reverse-proxied to the Python server
+   and this fork sits outside the live path entirely — consistent with the
+   "fallback during cutover" seed language, and it would mean the cutover has in effect
+   completed. What keeps this finding open is that the live path has not been *pinned*:
+   nobody has confirmed the effective `M365_SIDECAR_URL` on the prod host. Until that
+   is checked, do not rely on this repo being in (or out of) the live path; once
+   confirmed, fix the docstring — a doc that names the wrong proxy target is how the
+   two-server confusion (header warning) keeps regenerating.
 4. **Full read-write, org-mode, no `--read-only`.** Every write tool in the presets is
    live (send/delete mail, delete events, post to Teams). This repo enforces no
    confirmation; the human-in-the-loop gate lives only in the *Python* server's tool
@@ -279,3 +289,36 @@ consented at connect time (§6). Print the minimal list with
 | `/authorize` `/token` `/register` | GET/POST | none | OAuth proxy to Entra — **unused under BYOT** |
 | `/.well-known/oauth-authorization-server` | GET | none | OAuth metadata |
 | `/.well-known/oauth-protected-resource[/*]` | GET | none | RFC 9728 metadata |
+
+## 10. Known debts & follow-ups (12/08/2026)
+
+- **Settle S1 first (§8.3), because every other decision hangs on it.** The connector's
+  docstring names this fork as its proxy target while its configured default points at
+  the Python server — whichever is true in prod decides whether this repo is live
+  infrastructure or a standby. Check the effective `M365_SIDECAR_URL` on the prod host,
+  then fix the wrong half (docstring or config). If the Python server is confirmed as
+  the sole target, this fork's continued deployment should be justified explicitly or
+  the container retired — running an unreferenced Graph write-proxy is pure attack
+  surface.
+- **Disable the unused OAuth surface (§8.5).** `/authorize`, `/token`, `/register` and
+  dynamic client registration (DCR defaults **on**, `cli.ts:274-280`) are live on the
+  internal network even though BYOT never exercises them. Under BYOT the fork should be
+  a dumb token-forwarder and nothing more; an idle OAuth authorization surface — with
+  open DCR — is exactly the kind of dead code that gets forgotten until an audit finds
+  it. Pass `--no-dynamic-registration` (and prune what else can be switched off) rather
+  than keeping it "just in case".
+- **The external path has no confirm-before-send gate (§8.4).** The human-in-the-loop
+  rule for outward-facing actions (send mail, post to Teams) lives only in the *Python*
+  server's tool descriptions; this fork's kebab tools carry no such gate, so an
+  external client routed here could send mail with no confirmation step anywhere in the
+  chain. If external traffic ever lands on this fork (see S1), the gate must be
+  enforced at the connector or the fork — a policy that exists only in a sibling
+  server's prompt text does not protect this path.
+- **Stale "~12 tools" docstring in the PRIMARY server.** The Python server's module
+  docstring still says "~12 tools" (`Galaxy-Nexus/mcp_servers/galaxy-m365-mcp/server.py:5`)
+  while it actually registers **38** `@mcp.tool()`s. Cheap to fix, worth fixing: that
+  number is the first thing a reader sees, and under-describing the primary server by a
+  factor of three feeds the exact two-server confusion this document opens with.
+- **Upstream README still misleads (header warning).** `README.md` / `docs/deployment.md`
+  remain the softeria originals describing a per-client OAuth model Galaxy does not
+  use; this document stays authoritative until they are replaced or stubbed.
