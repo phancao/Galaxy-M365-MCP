@@ -7,7 +7,13 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted, galaxy]
+    # KHÔNG self-hosted, dù trần chi tiêu Actions chặn job hosted (#8). Kho này
+    # CÔNG KHAI: PR từ fork chạy workflow do NGƯỜI MỞ PR viết, nên chỉ cần một
+    # runner đăng ký cho kho là họ đổi `runs-on` và chạy mã trên máy ấy. Runner
+    # `galaxy` cũ nằm trên máy staging, chạy bằng user giữ token GitHub cá nhân
+    # (~/.git-credentials, gh auth) — gỡ 24/09/2026. Job hosted bị chặn thì đỏ
+    # với 0 bước; thế còn hơn một cửa mở vào máy.
+    runs-on: ubuntu-latest
 
     strategy:
       matrix:

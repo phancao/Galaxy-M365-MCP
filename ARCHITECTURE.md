@@ -9,20 +9,20 @@
 >
 > **Read this before trusting the tool names — two servers share one name.** When
 > anyone at Galaxy says "the M365 MCP server", they almost always mean the **PRIMARY**:
-> a *separate, first-party Python FastMCP server* at
+> a _separate, first-party Python FastMCP server_ at
 > `Galaxy-Nexus/mcp_servers/galaxy-m365-mcp/server.py` (container `galaxy-m365-mcp`),
 > which defines all **38 curated `m365_*` tools** and is what AgentOps binds directly.
 > **This repo is not that server.** This repo is the TS softeria fork, kept as the
 > **"fallback during cutover"** (per the Galaxy seed,
 > `Galaxy-Nexus/agentops/backend/database/seed_m365_assistant.sql`), exposing ~142 raw
 > **kebab-case** Graph tools (`list-mail-messages`, `send-mail`, …) that no Galaxy
-> agent is seeded to use. As of 12/08/2026 even the external connector's *default*
+> agent is seeded to use. As of 12/08/2026 even the external connector's _default_
 > target is the Python server, not this fork (finding S1, §8) — so this fork has **no
 > confirmed live traffic path**; treat it as standby until S1 is settled. See
 > [§3 Component map](#3-component-map). Do not conflate the two servers.
 >
 > **Stale-doc warning.** This repo's `README.md` and `docs/deployment.md` are the
-> *upstream* softeria docs. They describe a generic "each MCP client runs its own
+> _upstream_ softeria docs. They describe a generic "each MCP client runs its own
 > OAuth" model that Galaxy does **not** use. Where they disagree with this document
 > or `docker-compose.yml`, this document is authoritative.
 
@@ -39,15 +39,15 @@ on the internal Docker network; identity/token-minting is done elsewhere.
 
 ## 2. Tech stack (this repo)
 
-| Concern              | Choice |
-| -------------------- | ------ |
-| Language / runtime   | TypeScript, Node.js 24 Alpine, ESM (`package.json:5`, `Dockerfile:1`) |
-| MCP SDK / transport  | `@modelcontextprotocol/sdk` ^1.29, Express 5 + `StreamableHTTPServerTransport`, stateless (`server.ts:3,708`) |
-| Graph auth library   | `@azure/msal-node` — present but **dormant** under BYOT |
-| Tool surface         | Generated from Graph OpenAPI → `src/generated/client*.ts` + `src/endpoints.json` (311 endpoints) |
-| Hardening            | `helmet`, `express-rate-limit`, retry + circuit-breaker (`src/lib/graph-resilience.ts`) |
-| Observability        | OpenTelemetry Node auto-instrumentation → `otel-collector:4318` (`docker-compose.yml:32-40`) |
-| Build / test         | `tsup` → `dist/`; `vitest` (48 test files under `test/`) |
+| Concern             | Choice                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Language / runtime  | TypeScript, Node.js 24 Alpine, ESM (`package.json:5`, `Dockerfile:1`)                                         |
+| MCP SDK / transport | `@modelcontextprotocol/sdk` ^1.29, Express 5 + `StreamableHTTPServerTransport`, stateless (`server.ts:3,708`) |
+| Graph auth library  | `@azure/msal-node` — present but **dormant** under BYOT                                                       |
+| Tool surface        | Generated from Graph OpenAPI → `src/generated/client*.ts` + `src/endpoints.json` (311 endpoints)              |
+| Hardening           | `helmet`, `express-rate-limit`, retry + circuit-breaker (`src/lib/graph-resilience.ts`)                       |
+| Observability       | OpenTelemetry Node auto-instrumentation → `otel-collector:4318` (`docker-compose.yml:32-40`)                  |
+| Build / test        | `tsup` → `dist/`; `vitest` (48 test files under `test/`)                                                      |
 
 ## 3. Component map
 
@@ -137,13 +137,13 @@ in `Galaxy-Nexus/mcp_servers/galaxy-m365-mcp/server.py` (NOT this repo); each ca
 Graph `v1.0` directly. Write tools carry an "OUTWARD-FACING — only call after the user
 confirms" gate in their description (human-in-the-loop at the tool layer). Grouped:
 
-| Group | `m365_*` tool → Graph endpoint (`server.py` line) |
-| ----- | ------------------------------------------------- |
-| **Mail (14)** | `list_mail` GET `/me/mailFolders/{f}/messages` `:146` · `get_mail` GET `/me/messages/{id}` `:162` · `search_mail` GET `/me/messages?$search` `:177` · `draft_reply` POST `createReply[All]` `:197` · `create_draft` POST `/me/messages` `:210` · `send_reply` POST `reply[All]` `:225` · `send_mail` POST `/me/sendMail` `:235` · `forward_mail` POST `/forward` `:252` · `mark_read` PATCH `/me/messages/{id}` `:264` · `move_mail` POST `/move` `:272` · `delete_mail` DELETE `/me/messages/{id}` `:281` · `list_folders` GET `/me/mailFolders` `:289` · `list_attachments` GET `/attachments` `:300` · `get_attachment` GET `/attachments/{aid}` `:309` |
-| **Calendar (10)** | `list_events` GET `/me/calendarView` `:332` · `check_free_busy` POST `/me/calendar/getSchedule` `:366` · `schedule_teams_meeting` POST `/me/events` (online) `:404` · `reschedule_event` PATCH `/me/events/{id}` `:429` · `cancel_event` POST `/cancel` `:440` · `respond_event` POST `accept|decline|tentativelyAccept` `:448` · `get_event` GET `/me/events/{id}` `:471` · `create_event` POST `/me/events` `:488` · `update_event` PATCH `/me/events/{id}` `:515` · `find_meeting_times` POST `/me/findMeetingTimes` `:545` |
-| **Teams (4)** | `list_chats` GET `/me/chats` `:595` · `get_chat_messages` GET `/me/chats/{id}/messages` `:608` · `send_chat_message` POST `/me/chats/{id}/messages` `:626` · `create_chat` POST `/chats` `:635` |
-| **Files (4)** | `search_files` POST `/search/query` (driveItem) `:832` · `list_drive_files` GET `/me/drive/root/children` `:854` · `get_file_download_url` GET driveItem → `@microsoft.graph.downloadUrl` `:874` · `create_upload_session` POST `…/createUploadSession` `:893` |
-| **To-Do (6)** | `list_task_lists` GET `/me/todo/lists` `:702` · `list_tasks` GET `/me/todo/lists/{lid}/tasks` `:717` · `create_task` POST `…/tasks` `:735` · `complete_task` PATCH `…/tasks/{id}` `:756` · `update_task` PATCH `…/tasks/{id}` `:770` · `delete_task` DELETE `…/tasks/{id}` `:798` |
+| Group             | `m365_*` tool → Graph endpoint (`server.py` line)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Mail (14)**     | `list_mail` GET `/me/mailFolders/{f}/messages` `:146` · `get_mail` GET `/me/messages/{id}` `:162` · `search_mail` GET `/me/messages?$search` `:177` · `draft_reply` POST `createReply[All]` `:197` · `create_draft` POST `/me/messages` `:210` · `send_reply` POST `reply[All]` `:225` · `send_mail` POST `/me/sendMail` `:235` · `forward_mail` POST `/forward` `:252` · `mark_read` PATCH `/me/messages/{id}` `:264` · `move_mail` POST `/move` `:272` · `delete_mail` DELETE `/me/messages/{id}` `:281` · `list_folders` GET `/me/mailFolders` `:289` · `list_attachments` GET `/attachments` `:300` · `get_attachment` GET `/attachments/{aid}` `:309` |
+| **Calendar (10)** | `list_events` GET `/me/calendarView` `:332` · `check_free_busy` POST `/me/calendar/getSchedule` `:366` · `schedule_teams_meeting` POST `/me/events` (online) `:404` · `reschedule_event` PATCH `/me/events/{id}` `:429` · `cancel_event` POST `/cancel` `:440` · `respond_event` POST `accept                                                                                                                                                                                                                                                                                                                                                              | decline | tentativelyAccept` `:448`·`get_event`GET`/me/events/{id}` `:471`·`create_event`POST`/me/events` `:488`·`update_event`PATCH`/me/events/{id}` `:515`·`find_meeting_times`POST`/me/findMeetingTimes` `:545` |
+| **Teams (4)**     | `list_chats` GET `/me/chats` `:595` · `get_chat_messages` GET `/me/chats/{id}/messages` `:608` · `send_chat_message` POST `/me/chats/{id}/messages` `:626` · `create_chat` POST `/chats` `:635`                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **Files (4)**     | `search_files` POST `/search/query` (driveItem) `:832` · `list_drive_files` GET `/me/drive/root/children` `:854` · `get_file_download_url` GET driveItem → `@microsoft.graph.downloadUrl` `:874` · `create_upload_session` POST `…/createUploadSession` `:893`                                                                                                                                                                                                                                                                                                                                                                                             |
+| **To-Do (6)**     | `list_task_lists` GET `/me/todo/lists` `:702` · `list_tasks` GET `/me/todo/lists/{lid}/tasks` `:717` · `create_task` POST `…/tasks` `:735` · `complete_task` PATCH `…/tasks/{id}` `:756` · `update_task` PATCH `…/tasks/{id}` `:770` · `delete_task` DELETE `…/tasks/{id}` `:798`                                                                                                                                                                                                                                                                                                                                                                          |
 
 Every `m365_*` group has an equivalent among this repo's raw Graph tools (below),
 hitting the same Graph endpoints — the difference is naming, opinionated schemas
@@ -183,10 +183,10 @@ a BYOT recipient.
   (`:371-400`). Stored in table `linked_identities`, columns `access_token` /
   `refresh_token` as `EncryptedText` — **encrypted at rest** (`identity_service/models/user.py:79-97`).
 - **Delegated scopes requested** (`identity_service/sso/m365.py:23-39`): `offline_access,
-  openid, profile, email, Mail.Read, Mail.ReadWrite, Mail.Send, Calendars.ReadWrite,
-  OnlineMeetings.ReadWrite, Tasks.ReadWrite`; optional `Files.ReadWrite.All +
-  Sites.ReadWrite.All` when `M365_FILES_ENABLED` (`:62-68`); Teams adds `Chat.Read,
-  Chat.ReadWrite, Chat.Create, User.ReadBasic.All` (`:79-86`).
+openid, profile, email, Mail.Read, Mail.ReadWrite, Mail.Send, Calendars.ReadWrite,
+OnlineMeetings.ReadWrite, Tasks.ReadWrite`; optional `Files.ReadWrite.All +
+Sites.ReadWrite.All` when `M365_FILES_ENABLED` (`:62-68`); Teams adds `Chat.Read,
+Chat.ReadWrite, Chat.Create, User.ReadBasic.All` (`:79-86`).
 - **Token mint (per turn).** `POST /internal/m365/graph-token`
   (`identity_service/api/internal.py:806-882`), guarded by `verify_service_secret_strict`
   (`X-Service-Secret == INTERNAL_SERVICE_SECRET`, `:809,131-153`; `/internal/*` is
@@ -213,7 +213,7 @@ For the mail+calendar+teams+org-mode surface: `Mail.ReadWrite`, `Mail.Send`,
 `Chat.ReadWrite`, `ChannelMessage.Send`, `OnlineMeetings.ReadWrite`, `Presence.Read.All`,
 `Team.ReadBasic.All`, … plus always-injected `User.Read` + `offline_access`
 (`server.ts:531-556`). Work/school tools are skipped without `--org-mode`
-(`graph-tools.ts:1116-1120`). These are the scopes this fork *would* request when
+(`graph-tools.ts:1116-1120`). These are the scopes this fork _would_ request when
 driving its own OAuth; under BYOT the **actual** token scopes are whatever the broker
 consented at connect time (§6). Print the minimal list with
 `node dist/index.js --org-mode --preset mail,calendar,teams --list-permissions`.
@@ -222,13 +222,13 @@ consented at connect time (§6). Print the minimal list with
 
 1. **No cryptographic token validation in this tier** (`microsoft-auth.ts:91-150`) —
    only `exp`, only for JWTs; opaque tokens pass through. Any caller reaching
-   `vortex-m365-mcp:3000/mcp` with *any* valid user Graph token acts as that user. This
-   is acceptable *by design* (Graph validates), **but the acts-as-user guarantee rests
+   `vortex-m365-mcp:3000/mcp` with _any_ valid user Graph token acts as that user. This
+   is acceptable _by design_ (Graph validates), **but the acts-as-user guarantee rests
    entirely on the broker minting per-user tokens and on network isolation — this tier
    adds none.**
 2. **Network isolation is load-bearing.** `expose: "3000"` (no `ports:`) on the external
    `galaxy_network` (`docker-compose.yml:41-52`) — in-cluster only. External reach is
-   *supposed* to go through the connector's OAuth facade (RS256 verify, scope-gated).
+   _supposed_ to go through the connector's OAuth facade (RS256 verify, scope-gated).
 3. **Finding S1 — the connector's docstring is wrong about its own target (OPEN,
    status 12/08/2026).** The connector's docstring and inline comment say it fronts
    "the BYOT TypeScript sidecar (vortex-m365-mcp)" / "the TS fork"
@@ -239,21 +239,21 @@ consented at connect time (§6). Print the minimal list with
    override redirects it, external MCP traffic is reverse-proxied to the Python server
    and this fork sits outside the live path entirely — consistent with the
    "fallback during cutover" seed language, and it would mean the cutover has in effect
-   completed. What keeps this finding open is that the live path has not been *pinned*:
+   completed. What keeps this finding open is that the live path has not been _pinned_:
    nobody has confirmed the effective `M365_SIDECAR_URL` on the prod host. Until that
    is checked, do not rely on this repo being in (or out of) the live path; once
    confirmed, fix the docstring — a doc that names the wrong proxy target is how the
    two-server confusion (header warning) keeps regenerating.
 4. **Full read-write, org-mode, no `--read-only`.** Every write tool in the presets is
    live (send/delete mail, delete events, post to Teams). This repo enforces no
-   confirmation; the human-in-the-loop gate lives only in the *Python* server's tool
+   confirmation; the human-in-the-loop gate lives only in the _Python_ server's tool
    descriptions (§5a) — external clients hitting this fork's kebab tools get no such gate.
 5. **Unused-but-open OAuth surface.** `/authorize`, `/token`, `/register`, `.well-known/*`
    are all live in HTTP mode (`server.ts:338-412,563-692`) and dynamic client
    registration defaults **on** (`cli.ts:274-280`). BYOT never uses them → dead,
    rate-limited surface on the internal network. Consider `--no-dynamic-registration`.
 6. **`get-download-url` / `m365_get_file_download_url` return a pre-authenticated URL**
-   granting time-limited *unauthenticated* read of the file (`graph-tools.ts:574-601`).
+   granting time-limited _unauthenticated_ read of the file (`graph-tools.ts:574-601`).
    Must not be logged or forwarded to untrusted sinks.
 7. **`/health` discloses `orgMode`** unauthenticated (`server.ts:258-260`) — negligible.
 
@@ -281,14 +281,14 @@ consented at connect time (§6). Print the minimal list with
 
 ### Endpoints exposed by this server (HTTP mode)
 
-| Path | Method | Auth | Notes |
-| ---- | ------ | ---- | ----- |
-| `/health` | GET | none | Galaxy liveness probe (`server.ts:258`) |
-| `/` | GET | none | "…is running" (`server.ts:793`) |
-| `/mcp` | GET/POST | Bearer | MCP JSON-RPC; BYOT token used verbatim (`server.ts:702-790`) |
-| `/authorize` `/token` `/register` | GET/POST | none | OAuth proxy to Entra — **unused under BYOT** |
-| `/.well-known/oauth-authorization-server` | GET | none | OAuth metadata |
-| `/.well-known/oauth-protected-resource[/*]` | GET | none | RFC 9728 metadata |
+| Path                                        | Method   | Auth   | Notes                                                        |
+| ------------------------------------------- | -------- | ------ | ------------------------------------------------------------ |
+| `/health`                                   | GET      | none   | Galaxy liveness probe (`server.ts:258`)                      |
+| `/`                                         | GET      | none   | "…is running" (`server.ts:793`)                              |
+| `/mcp`                                      | GET/POST | Bearer | MCP JSON-RPC; BYOT token used verbatim (`server.ts:702-790`) |
+| `/authorize` `/token` `/register`           | GET/POST | none   | OAuth proxy to Entra — **unused under BYOT**                 |
+| `/.well-known/oauth-authorization-server`   | GET      | none   | OAuth metadata                                               |
+| `/.well-known/oauth-protected-resource[/*]` | GET      | none   | RFC 9728 metadata                                            |
 
 ## 10. Known debts & follow-ups (12/08/2026)
 
@@ -308,7 +308,7 @@ consented at connect time (§6). Print the minimal list with
   it. Pass `--no-dynamic-registration` (and prune what else can be switched off) rather
   than keeping it "just in case".
 - **The external path has no confirm-before-send gate (§8.4).** The human-in-the-loop
-  rule for outward-facing actions (send mail, post to Teams) lives only in the *Python*
+  rule for outward-facing actions (send mail, post to Teams) lives only in the _Python_
   server's tool descriptions; this fork's kebab tools carry no such gate, so an
   external client routed here could send mail with no confirmation step anywhere in the
   chain. If external traffic ever lands on this fork (see S1), the gate must be
