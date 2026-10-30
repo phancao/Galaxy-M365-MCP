@@ -40,7 +40,10 @@ jobs:
       - name: Lint code
         run: npm run lint
 
+      # Optional deps @azure/identity and @azure/keyvault-secrets need Node >= 20,
+      # so npm skips them on 18 and src/secrets.ts cannot resolve their types there
       - name: Type check
+        if: matrix.node-version != '18.x'
         run: npm run typecheck
 
       - name: Check formatting
