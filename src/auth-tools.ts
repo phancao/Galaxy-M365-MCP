@@ -1,7 +1,37 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import AuthManager from './auth.js';
+import logger from './logger.js';
 import { getRequestTokens } from './request-context.js';
+
+type LoginTestResult = Awaited<ReturnType<AuthManager['testLogin']>>;
+
+export const LOGIN_FAILED_HINT =
+  'Sign-in finished but the connection check against Microsoft Graph failed. ' +
+  'Sign in again (--login, or the login tool with force: true) using the expected Microsoft account. ' +
+  'If it still fails, check network access to Microsoft Graph and that the app registration grants ' +
+  'the requested permissions, then run --verify-login.';
+
+/**
+ * CLI `--login`: sign in, check the token against Graph, print the result and
+ * return the process exit code — 0 only when testLogin passes.
+ */
+export async function runCliLogin(authManager: AuthManager, authBrowser: boolean): Promise<number> {
+  if (authBrowser) {
+    await authManager.acquireTokenInteractive();
+  } else {
+    await authManager.acquireTokenByDeviceCode();
+  }
+  logger.info('Login completed, testing connection with Graph API...');
+  const result: LoginTestResult = await authManager.testLogin();
+  if (!result.success) {
+    console.error(`Login failed: ${result.message}\n${LOGIN_FAILED_HINT}`);
+    console.log(JSON.stringify({ ...result, hint: LOGIN_FAILED_HINT }));
+    return 1;
+  }
+  console.log(JSON.stringify(result));
+  return 0;
+}
 
 export function registerAuthTools(server: McpServer, authManager: AuthManager): void {
   server.tool(
@@ -32,6 +62,21 @@ export function registerAuthTools(server: McpServer, authManager: AuthManager): 
         if (authManager.getUseInteractiveAuth()) {
           await authManager.acquireTokenInteractive();
           const loginResult = await authManager.testLogin();
+          if (!loginResult.success) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    status: 'Login failed',
+                    ...loginResult,
+                    hint: LOGIN_FAILED_HINT,
+                  }),
+                },
+              ],
+              isError: true,
+            };
+          }
           return {
             content: [
               {
@@ -96,7 +141,7 @@ export function registerAuthTools(server: McpServer, authManager: AuthManager): 
   });
 
   server.tool('verify-login', 'Check current Microsoft authentication status', {}, async () => {
-    let testResult: Awaited<ReturnType<AuthManager['testLogin']>>;
+    let testResult: LoginTestResult;
     try {
       testResult = await authManager.testLogin();
     } catch (error) {
