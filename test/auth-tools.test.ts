@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { registerAuthTools } from '../src/auth-tools.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LOGIN_FAILED_HINT, registerAuthTools, runCliLogin } from '../src/auth-tools.js';
 
 vi.mock('zod', () => {
   const mockZod = {
@@ -116,6 +116,26 @@ describe('Auth Tools', () => {
         message: 'Login successful',
         userData: { displayName: 'Browser User' },
       });
+      expect(result.isError).toBeUndefined();
+    });
+
+    it('should report failure, not success, when browser login cannot be verified', async () => {
+      authManager.getUseInteractiveAuth.mockReturnValue(true);
+      authManager.testLogin
+        .mockResolvedValueOnce({ success: false, message: 'Not logged in' })
+        .mockResolvedValueOnce({ success: false, message: 'Login failed - no token received' });
+
+      const result = await loginTool({ force: false });
+
+      expect(authManager.acquireTokenInteractive).toHaveBeenCalled();
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).not.toContain('Login successful');
+      expect(JSON.parse(result.content[0].text)).toEqual({
+        status: 'Login failed',
+        success: false,
+        message: 'Login failed - no token received',
+        hint: LOGIN_FAILED_HINT,
+      });
     });
 
     it('should proceed with login when not already logged in', async () => {
@@ -161,6 +181,66 @@ describe('Auth Tools', () => {
       expect(authManager.testLogin).toHaveBeenCalled();
       expect(authManager.acquireTokenByDeviceCode).toHaveBeenCalled();
       expect(result.content[0].text).toContain('device_code_required');
+    });
+  });
+
+  describe('runCliLogin (--login)', () => {
+    let log: ReturnType<typeof vi.spyOn>;
+    let err: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      log = vi.spyOn(console, 'log').mockImplementation(() => {});
+      err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      log.mockRestore();
+      err.mockRestore();
+    });
+
+    it('returns 0 and prints the result when the browser login verifies', async () => {
+      const ok = { success: true, message: 'Login successful', userData: { displayName: 'U' } };
+      authManager.testLogin.mockResolvedValue(ok);
+
+      const code = await runCliLogin(authManager as never, true);
+
+      expect(code).toBe(0);
+      expect(authManager.acquireTokenInteractive).toHaveBeenCalled();
+      expect(log).toHaveBeenCalledWith(JSON.stringify(ok));
+      expect(err).not.toHaveBeenCalled();
+    });
+
+    it('returns non-zero with a fix hint when the browser login does not verify', async () => {
+      authManager.testLogin.mockResolvedValue({
+        success: false,
+        message: 'Login successful but Graph API access failed: 401',
+      });
+
+      const code = await runCliLogin(authManager as never, true);
+
+      expect(code).not.toBe(0);
+      expect(err).toHaveBeenCalledWith(
+        `Login failed: Login successful but Graph API access failed: 401\n${LOGIN_FAILED_HINT}`
+      );
+      expect(JSON.parse(log.mock.calls[0][0] as string)).toEqual({
+        success: false,
+        message: 'Login successful but Graph API access failed: 401',
+        hint: LOGIN_FAILED_HINT,
+      });
+    });
+
+    it('returns non-zero when the device-code login does not verify', async () => {
+      authManager.acquireTokenByDeviceCode.mockResolvedValue(undefined);
+      authManager.testLogin.mockResolvedValue({
+        success: false,
+        message: 'Login failed - no token received',
+      });
+
+      const code = await runCliLogin(authManager as never, false);
+
+      expect(code).toBe(1);
+      expect(authManager.acquireTokenByDeviceCode).toHaveBeenCalled();
+      expect(authManager.acquireTokenInteractive).not.toHaveBeenCalled();
     });
   });
 

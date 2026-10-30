@@ -5,6 +5,7 @@ import { parseArgs } from './cli.js';
 import logger from './logger.js';
 import AuthManager, { buildAllowedScopeDiagnostics, resolveAuthScopes } from './auth.js';
 import MicrosoftGraphServer from './server.js';
+import { runCliLogin } from './auth-tools.js';
 import {
   getExpectedAccountInertWarning,
   shouldAssertExpectedAccountAtStartup,
@@ -103,15 +104,7 @@ async function main(): Promise<void> {
     }
 
     if (args.login) {
-      if (args.authBrowser) {
-        await authManager.acquireTokenInteractive();
-      } else {
-        await authManager.acquireTokenByDeviceCode();
-      }
-      logger.info('Login completed, testing connection with Graph API...');
-      const result = await authManager.testLogin();
-      console.log(JSON.stringify(result));
-      process.exit(0);
+      process.exit(await runCliLogin(authManager, Boolean(args.authBrowser)));
     }
 
     if (args.verifyLogin) {
